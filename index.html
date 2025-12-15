@@ -3,220 +3,247 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Groupthink Classroom Simulator</title>
+    <title>Groupthink Simulator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 </head>
 <body class="bg-gray-950 text-white">
     <div id="app"></div>
-    <script src="data:text/javascript;base64,${btoa(`
-        let mode,peer,hostId,myRole,connections={},gameActive=false;
-        const roles=[
-            {id:'boss',name:'Boss',color:'bg-red-600',emoji:'👑',role:'Leader'},
-            {id:'sarah',name:'Sarah',color:'bg-purple-600',emoji:'🤝',role:'Yes-Man'},
-            {id:'mike',name:'Mike',color:'bg-orange-600',emoji:'🛡️',role:'Enforcer'},
-            {id:'jen',name:'Jen',color:'bg-teal-600',emoji:'😊',role:'Follower'},
-            {id:'alex',name:'Alex',color:'bg-blue-600',emoji:'🧠',role:'Dissenter'}
-        ];
-        const dialogue=[
-            {role:'boss',text:"Team, I've had a vision. Sitting is the new smoking. I propose we remove ALL office chairs."},
-            {role:'sarah',text:"Brilliant! Standing desks boost productivity!"},
-            {role:'alex',text:"But research shows standing all day causes serious health issues like varicose veins."},
-            {role:'mike',text:"Alex, we need innovators here, not naysayers!"},
-            {role:'jen',text:"The boss usually knows what's best..."},
-            {role:'alex',text:"What about employees with disabilities? This seems discriminatory."},
-            {role:'boss',text:"We'll make exceptions. But standing is the default. It's settled."},
-            {role:'sarah',text:"Alex, trust the leadership!"},
-            {role:'mike',text:"If you're not on board, maybe you're not a team player."},
-            {role:'alex',text:"I just think we should research more before—"},
-            {role:'jen',text:"Actually, I'm starting to see the vision."},
-            {role:'boss',text:"Alex, are you with us or not?"},
-            {role:'alex',text:"Fine... if everyone thinks it's a good idea..."},
-            {role:'sarah',text:"Unanimous! This will revolutionize our workplace!"},
-            {role:'mike',text:"Glad we're aligned."},
-            {role:'alex',text:"*stays silent*"}
+
+    <script>
+        let mode, peer, hostId, myRole, connections = {}, gameActive = false;
+        
+        const roles = [
+            {id:'boss', name:'Boss', color:'bg-red-600', emoji:'👑'},
+            {id:'sarah', name:'Sarah', color:'bg-purple-600', emoji:'🤝'},
+            {id:'mike', name:'Mike', color:'bg-orange-600', emoji:'🛡️'},
+            {id:'jen', name:'Jen', color:'bg-teal-600', emoji:'😊'},
+            {id:'alex', name:'Alex', color:'bg-blue-600', emoji:'🧠'}
         ];
         
-        function init(){
-            const p=new URLSearchParams(location.search);
-            p.get('mode')==='student'&&p.get('host')&&p.get('role')?initStudent(p.get('host'),p.get('role')):showStart();
+        const dialogue = [
+            {role:'boss', text:"Team, I've had a vision. Sitting is the new smoking. I propose we remove ALL office chairs."},
+            {role:'sarah', text:"Brilliant! Standing desks boost productivity!"},
+            {role:'alex', text:"But research shows standing all day causes serious health issues."},
+            {role:'mike', text:"Alex, we need innovators here, not naysayers!"},
+            {role:'jen', text:"The boss usually knows what's best..."},
+            {role:'alex', text:"What about employees with disabilities? This seems discriminatory."},
+            {role:'boss', text:"We'll make exceptions. But standing is the default."},
+            {role:'sarah', text:"Alex, trust the leadership!"},
+            {role:'mike', text:"If you're not on board, maybe you're not a team player."},
+            {role:'alex', text:"I just think we should research more—"},
+            {role:'jen', text:"Actually, I'm starting to see the vision."},
+            {role:'boss', text:"Alex, are you with us or not?"},
+            {role:'alex', text:"Fine... if everyone thinks it's a good idea..."},
+            {role:'sarah', text:"Unanimous! This will revolutionize our workplace!"},
+            {role:'mike', text:"Glad we're aligned."},
+            {role:'alex', text:"*stays silent*"}
+        ];
+        
+        function init() {
+            const params = new URLSearchParams(location.search);
+            if (params.get('mode') === 'student' && params.get('host') && params.get('role')) {
+                initStudent(params.get('host'), params.get('role'));
+            } else {
+                showStart();
+            }
         }
         
-        function showStart(){
-            app.innerHTML=\`<div class="flex items-center justify-center min-h-screen p-4">
-                <button onclick="startHost()" class="bg-blue-600 hover:bg-blue-500 p-12 rounded-3xl text-center transition-all hover:scale-105 shadow-2xl max-w-md">
-                    <div class="text-6xl mb-4">👥</div>
-                    <h1 class="text-4xl font-bold mb-3">Start Classroom</h1>
-                    <p class="text-blue-200">Students join via QR codes</p>
-                </button>
-            </div>\`;
-        }
-        
-        async function startHost(){
-            app.innerHTML='<div class="flex items-center justify-center min-h-screen"><div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent"></div></div>';
-            peer=new Peer();
-            peer.on('open',id=>{hostId=id;showLobby();});
-            peer.on('connection',c=>{connections[c.metadata.role]=c;c.on('open',updateStatus);});
-        }
-        
-        function showLobby(){
-            const u=location.href.split('?')[0];
-            app.innerHTML=\`<div class="p-4 max-w-6xl mx-auto">
-                <h1 class="text-4xl font-bold text-center mb-6">Scan QR Codes to Join</h1>
-                <div class="grid sm:grid-cols-5 gap-6 mb-8">\${roles.map(r=>\`
-                    <div id="card-\${r.id}" class="bg-gray-900 p-4 rounded-xl border-2 border-gray-700 text-center">
-                        <canvas id="qr-\${r.id}" class="bg-white p-2 rounded mb-3 w-full"></canvas>
-                        <div class="\${r.color} w-12 h-12 rounded-full mx-auto flex items-center justify-center text-2xl mb-2">\${r.emoji}</div>
-                        <h3 class="font-bold">\${r.name}</h3>
-                        <div class="status-\${r.id} text-xs mt-2 text-gray-500">Waiting...</div>
-                    </div>\`).join('')}</div>
-                <div class="text-center">
-                    <button onclick="startSim()" class="px-16 py-6 bg-green-600 hover:bg-green-500 font-bold text-2xl rounded-2xl">▶ START</button>
+        function showStart() {
+            app.innerHTML = `
+                <div class="flex items-center justify-center min-h-screen p-4">
+                    <button onclick="startHost()" class="bg-blue-600 hover:bg-blue-500 p-12 rounded-3xl transition-all hover:scale-105 shadow-2xl">
+                        <div class="text-6xl mb-4">👥</div>
+                        <h1 class="text-4xl font-bold mb-3">Start Classroom</h1>
+                        <p class="text-blue-200">Students join via QR codes</p>
+                    </button>
                 </div>
-            </div>\`;
-            setTimeout(()=>roles.forEach(r=>QRCode.toCanvas(document.getElementById(\`qr-\${r.id}\`),\`\${u}?mode=student&host=\${hostId}&role=\${r.id}\`,{width:200})),100);
+            `;
         }
         
-        function updateStatus(){
-            roles.forEach(r=>{
-                if(connections[r.id]?.open){
-                    document.querySelector(\`.status-\${r.id}\`).textContent='✓ Ready';
-                    document.getElementById(\`card-\${r.id}\`).className=document.getElementById(\`card-\${r.id}\`).className.replace('gray-700','green-500');
+        function startHost() {
+            app.innerHTML = '<div class="flex items-center justify-center min-h-screen"><div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent"></div></div>';
+            peer = new Peer();
+            peer.on('open', id => {
+                hostId = id;
+                showLobby();
+            });
+            peer.on('connection', conn => {
+                connections[conn.metadata.role] = conn;
+                conn.on('open', updateStatus);
+            });
+        }
+        
+        function showLobby() {
+            const url = location.href.split('?')[0];
+            app.innerHTML = `
+                <div class="p-4 max-w-6xl mx-auto">
+                    <h1 class="text-4xl font-bold text-center mb-6">Scan QR Codes to Join</h1>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-6 mb-8">
+                        ${roles.map(r => `
+                            <div id="card-${r.id}" class="bg-gray-900 p-4 rounded-xl border-2 border-gray-700 text-center">
+                                <canvas id="qr-${r.id}" class="bg-white p-2 rounded mb-3 w-full"></canvas>
+                                <div class="${r.color} w-12 h-12 rounded-full mx-auto flex items-center justify-center text-2xl mb-2">${r.emoji}</div>
+                                <h3 class="font-bold">${r.name}</h3>
+                                <div class="status-${r.id} text-xs mt-2 text-gray-500">Waiting...</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="text-center">
+                        <button onclick="startSim()" class="px-16 py-6 bg-green-600 hover:bg-green-500 font-bold text-2xl rounded-2xl">▶ START</button>
+                    </div>
+                </div>
+            `;
+            setTimeout(() => {
+                roles.forEach(r => {
+                    const canvas = document.getElementById(`qr-${r.id}`);
+                    QRCode.toCanvas(canvas, `${url}?mode=student&host=${hostId}&role=${r.id}`, {width: 200});
+                });
+            }, 100);
+        }
+        
+        function updateStatus() {
+            roles.forEach(r => {
+                if (connections[r.id]?.open) {
+                    document.querySelector(`.status-${r.id}`).textContent = '✓ Ready';
+                    document.getElementById(`card-${r.id}`).className = document.getElementById(`card-${r.id}`).className.replace('gray-700', 'green-500');
                 }
             });
         }
         
-        function initStudent(h,r){
-            myRole=roles.find(x=>x.id===r);
-            app.innerHTML=\`<div class="flex flex-col items-center justify-center min-h-screen text-center p-6">
-                <div class="\${myRole.color} w-28 h-28 rounded-full flex items-center justify-center text-5xl mb-6">\${myRole.emoji}</div>
-                <h1 class="text-5xl font-bold mb-4">\${myRole.name}</h1>
-                <p class="text-gray-500">\${myRole.role}</p>
-                <div class="mt-8 text-yellow-500">Connecting...</div>
-            </div>\`;
-            peer=new Peer();
-            peer.on('open',id=>{
-                const c=peer.connect(h,{metadata:{role:r}});
-                c.on('open',()=>app.innerHTML=app.innerHTML.replace('Connecting','✓ Connected! Waiting...'));
-                c.on('data',d=>{
-                    if(d.type==='yourTurn')showTurn(d.text);
-                    else if(d.type==='otherTurn')showListen(d.speaker,d.text);
-                    else if(d.type==='gameEnd')app.innerHTML='<div class="flex items-center justify-center min-h-screen text-center"><div><div class="text-6xl mb-4">✓</div><h1 class="text-3xl font-bold">Complete!</h1></div></div>';
+        function initStudent(host, roleId) {
+            myRole = roles.find(r => r.id === roleId);
+            app.innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-screen text-center p-6">
+                    <div class="${myRole.color} w-28 h-28 rounded-full flex items-center justify-center text-5xl mb-6">${myRole.emoji}</div>
+                    <h1 class="text-5xl font-bold mb-4">${myRole.name}</h1>
+                    <div class="mt-8 text-yellow-500">Connecting...</div>
+                </div>
+            `;
+            peer = new Peer();
+            peer.on('open', () => {
+                const conn = peer.connect(host, {metadata: {role: roleId}});
+                conn.on('open', () => {
+                    app.innerHTML = app.innerHTML.replace('Connecting', '✓ Connected! Waiting...');
+                });
+                conn.on('data', data => {
+                    if (data.type === 'yourTurn') showTurn(data.text);
+                    else if (data.type === 'otherTurn') showListen(data.speaker, data.text);
+                    else if (data.type === 'gameEnd') app.innerHTML = '<div class="flex items-center justify-center min-h-screen text-center"><h1 class="text-4xl font-bold">✓ Complete!</h1></div>';
                 });
             });
         }
         
-        function showTurn(t){
-            if(navigator.vibrate)navigator.vibrate([200,100,200]);
-            app.innerHTML=\`<div class="flex flex-col min-h-screen bg-green-900">
-                <div class="p-4 bg-black/30 flex justify-between border-b-4 border-green-400">
-                    <div class="flex items-center gap-2">
-                        <div class="\${myRole.color} w-10 h-10 rounded-full flex items-center justify-center text-xl">\${myRole.emoji}</div>
-                        <span class="font-bold">\${myRole.name}</span>
+        function showTurn(text) {
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            app.innerHTML = `
+                <div class="flex flex-col min-h-screen bg-green-900">
+                    <div class="p-4 bg-black/30 flex justify-between border-b-4 border-green-400">
+                        <div class="flex items-center gap-2">
+                            <div class="${myRole.color} w-10 h-10 rounded-full flex items-center justify-center text-xl">${myRole.emoji}</div>
+                            <span class="font-bold">${myRole.name}</span>
+                        </div>
+                        <span class="bg-red-600 px-3 py-1 rounded-full text-xs font-bold animate-pulse">● LIVE</span>
                     </div>
-                    <span class="bg-red-600 px-3 py-1 rounded-full text-xs font-bold animate-pulse">● LIVE</span>
-                </div>
-                <div class="flex-1 flex items-center justify-center p-6 text-center">
-                    <div>
-                        <h2 class="text-green-300 text-3xl font-bold mb-8 animate-pulse">YOUR TURN!</h2>
-                        <div class="bg-white text-black p-8 rounded-3xl border-8 border-green-400 max-w-2xl">
-                            <p class="text-xs text-gray-600 uppercase mb-3">READ ALOUD:</p>
-                            <p class="text-3xl font-bold">"\${t}"</p>
+                    <div class="flex-1 flex items-center justify-center p-6">
+                        <div class="text-center">
+                            <h2 class="text-green-300 text-3xl font-bold mb-8 animate-pulse">YOUR TURN!</h2>
+                            <div class="bg-white text-black p-8 rounded-3xl border-8 border-green-400 max-w-2xl">
+                                <p class="text-xs text-gray-600 uppercase mb-3">READ ALOUD:</p>
+                                <p class="text-3xl font-bold">"${text}"</p>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>\`;
+            `;
         }
         
-        function showListen(s,t){
-            app.innerHTML=\`<div class="flex flex-col items-center justify-center min-h-screen p-6 text-center">
-                <div class="opacity-50 mb-8">
-                    <div class="\${myRole.color} w-20 h-20 rounded-full flex items-center justify-center text-3xl mb-4 mx-auto">\${myRole.emoji}</div>
-                    <p class="text-gray-500">\${myRole.name}</p>
-                </div>
-                <p class="text-gray-400 text-xs uppercase mb-4">LISTEN...</p>
-                <div class="bg-gray-900 p-6 rounded-2xl border-2 border-blue-600 max-w-xl">
-                    <p class="text-blue-400 font-bold mb-2">\${s} is speaking:</p>
-                    <p class="text-gray-300 text-xl italic">"\${t}"</p>
-                </div>
-            </div>\`;
-        }
-        
-        async function startSim(){
-            gameActive=true;
-            app.innerHTML=\`<div class="p-4 max-w-7xl mx-auto">
-                <div class="flex justify-between mb-6">
-                    <div><h1 class="text-3xl font-bold">Simulation</h1><p class="text-gray-400">Round <span id="r">0</span>/16</p></div>
-                    <button onclick="location.reload()" class="px-6 py-3 bg-red-900 rounded-lg font-bold">STOP</button>
-                </div>
-                <div class="grid lg:grid-cols-4 gap-6">
-                    <div class="lg:col-span-3">
-                        <div class="bg-gray-900 rounded-2xl p-6 border border-gray-800 mb-6">
-                            <div id="av" class="flex justify-around flex-wrap gap-6">\${roles.map(r=>\`
-                                <div class="text-center" id="a-\${r.id}">
-                                    <div class="\${r.color} w-16 h-16 rounded-full flex items-center justify-center text-2xl border-4 border-gray-700">\${r.emoji}</div>
-                                    <p class="text-sm mt-2">\${r.name}</p>
-                                </div>\`).join('')}</div>
-                        </div>
-                        <div id="chat" class="bg-gray-900 rounded-xl p-4 border border-gray-700 min-h-[400px] max-h-[500px] overflow-y-auto"></div>
+        function showListen(speaker, text) {
+            app.innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-screen p-6 text-center">
+                    <div class="opacity-50 mb-8">
+                        <div class="${myRole.color} w-20 h-20 rounded-full flex items-center justify-center text-3xl mb-4 mx-auto">${myRole.emoji}</div>
+                        <p class="text-gray-500">${myRole.name}</p>
                     </div>
-                    <div><div class="bg-gray-800 p-5 rounded-xl border border-gray-700"><h4 class="font-bold text-sm uppercase mb-3 pb-2 border-b border-gray-700">Scenario</h4><p class="text-sm text-gray-300">Boss proposes removing ALL chairs to "boost productivity"</p></div></div>
+                    <p class="text-gray-400 text-xs uppercase mb-4">LISTEN...</p>
+                    <div class="bg-gray-900 p-6 rounded-2xl border-2 border-blue-600 max-w-xl">
+                        <p class="text-blue-400 font-bold mb-2">${speaker} is speaking:</p>
+                        <p class="text-gray-300 text-xl italic">"${text}"</p>
+                    </div>
                 </div>
-            </div>\`;
-            for(let i=0;i<dialogue.length&&gameActive;i++){
-                const l=dialogue[i];
-                document.getElementById('r').textContent=i+1;
-                highlight(l.role);
-                addMsg(l.role,l.text);
-                broadcast(l.role,l.text);
+            `;
+        }
+        
+        async function startSim() {
+            gameActive = true;
+            app.innerHTML = `
+                <div class="p-4 max-w-7xl mx-auto">
+                    <div class="flex justify-between mb-6">
+                        <div><h1 class="text-3xl font-bold">Simulation</h1><p class="text-gray-400">Round <span id="round">0</span>/16</p></div>
+                        <button onclick="location.reload()" class="px-6 py-3 bg-red-900 rounded-lg font-bold">STOP</button>
+                    </div>
+                    <div id="chat" class="bg-gray-900 rounded-xl p-4 border border-gray-700 min-h-[500px] overflow-y-auto"></div>
+                </div>
+            `;
+            
+            for (let i = 0; i < dialogue.length && gameActive; i++) {
+                const line = dialogue[i];
+                document.getElementById('round').textContent = i + 1;
+                addMsg(line.role, line.text);
+                broadcast(line.role, line.text);
                 await sleep(3000);
-                unhighlight(l.role);
             }
-            if(gameActive){
-                await sleep(2000);
+            
+            if (gameActive) {
                 endGame();
-                alert('✓ Complete!\\n\\nDiscuss:\\n1. Did you feel pressure to conform?\\n2. Was logic fairly considered?\\n3. What groupthink symptoms appeared?');
+                alert('✓ Complete!\n\nDiscuss:\n1. Did you feel pressure to conform?\n2. Was logic considered?\n3. What groupthink symptoms appeared?');
             }
         }
         
-        function addMsg(r,t){
-            const role=roles.find(x=>x.id===r);
-            const m=document.createElement('div');
-            m.className='mb-4';
-            m.innerHTML=\`<div class="bg-gray-800 p-4 rounded-2xl border border-gray-700">
-                <div class="flex items-center gap-2 mb-2">
-                    <span class="\${role.color} w-7 h-7 rounded-full flex items-center justify-center">\${role.emoji}</span>
-                    <span class="text-xs text-gray-400 font-bold uppercase">\${role.name}</span>
+        function addMsg(roleId, text) {
+            const role = roles.find(r => r.id === roleId);
+            const msg = document.createElement('div');
+            msg.className = 'mb-4';
+            msg.innerHTML = `
+                <div class="bg-gray-800 p-4 rounded-2xl border border-gray-700">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="${role.color} w-7 h-7 rounded-full flex items-center justify-center">${role.emoji}</span>
+                        <span class="text-xs text-gray-400 font-bold uppercase">${role.name}</span>
+                    </div>
+                    <p class="text-gray-200">${text}</p>
                 </div>
-                <p class="text-gray-200">\${t}</p>
-            </div>\`;
-            chat.appendChild(m);
-            chat.scrollTop=chat.scrollHeight;
+            `;
+            chat.appendChild(msg);
+            chat.scrollTop = chat.scrollHeight;
         }
         
-        function highlight(r){
-            const a=document.getElementById(\`a-\${r}\`);
-            if(a)a.querySelector('div').className=a.querySelector('div').className.replace('gray-700','yellow-400 scale-125');
+        function broadcast(roleId, text) {
+            if (connections[roleId]?.open) {
+                connections[roleId].send({type: 'yourTurn', text: text});
+            }
+            roles.forEach(r => {
+                if (r.id !== roleId && connections[r.id]?.open) {
+                    connections[r.id].send({
+                        type: 'otherTurn',
+                        speaker: roles.find(x => x.id === roleId).name,
+                        text: text
+                    });
+                }
+            });
         }
         
-        function unhighlight(r){
-            const a=document.getElementById(\`a-\${r}\`);
-            if(a)a.querySelector('div').className=a.querySelector('div').className.replace('yellow-400 scale-125','gray-700');
+        function endGame() {
+            Object.values(connections).forEach(conn => {
+                if (conn?.open) conn.send({type: 'gameEnd'});
+            });
         }
         
-        async function broadcast(r,t){
-            if(connections[r]?.open)connections[r].send({type:'yourTurn',text:t});
-            roles.forEach(x=>{if(x.id!==r&&connections[x.id]?.open)connections[x.id].send({type:'otherTurn',speaker:roles.find(y=>y.id===r).name,text:t});});
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
         }
         
-        function endGame(){
-            Object.values(connections).forEach(c=>{if(c?.open)c.send({type:'gameEnd'});});
-        }
-        
-        function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
-        
-        window.onload=init;
-    `)}"></script>
+        window.onload = init;
+    </script>
 </body>
 </html>
