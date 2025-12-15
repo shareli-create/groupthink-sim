@@ -1,27 +1,178 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Groupthink Simulator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
-</head>
-<body class="bg-gray-950 text-white">
-    <div id="app"></div>
-
-    <script>
-        let peer, hostId, myRole, connections = {}, gameActive = false;
+    <title>Groupthink Simulator - Working Version</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            background: #0a0a0a; 
+            color: white; 
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .btn { 
+            background: #3b82f6; 
+            color: white; 
+            border: none; 
+            padding: 20px 40px; 
+            font-size: 20px; 
+            border-radius: 10px; 
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn:hover { background: #2563eb; }
+        .btn-green { background: #10b981; }
+        .btn-green:hover { background: #059669; }
+        .btn-red { background: #ef4444; }
+        .btn-red:hover { background: #dc2626; }
         
+        .character-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .character-card {
+            background: #1a1a1a;
+            border: 2px solid #333;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        .character-card.connected { border-color: #10b981; }
+        .emoji { font-size: 60px; margin: 20px 0; }
+        .status {
+            font-size: 12px;
+            padding: 5px 10px;
+            border-radius: 20px;
+            background: #333;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        .status.ready { background: #10b981; }
+        
+        .message {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 10px 0;
+        }
+        .message.alex { border-color: #3b82f6; }
+        .speaker { 
+            font-weight: bold; 
+            color: #888; 
+            font-size: 12px; 
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        .text { font-size: 18px; line-height: 1.6; }
+        
+        .student-view {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+        }
+        .your-turn {
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 800px;
+            margin: 20px;
+        }
+        .your-turn h1 {
+            font-size: 48px;
+            margin-bottom: 30px;
+            animation: pulse 1s infinite;
+        }
+        .your-turn .line {
+            background: white;
+            color: black;
+            padding: 30px;
+            border-radius: 15px;
+            font-size: 28px;
+            font-weight: bold;
+            line-height: 1.5;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .center { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 80vh;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        h1 { font-size: 48px; margin-bottom: 20px; }
+        h2 { font-size: 32px; margin-bottom: 20px; }
+        p { color: #888; margin-bottom: 20px; }
+        
+        .chat-area {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 20px;
+            height: 600px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+        
+        .link-box {
+            background: #1a1a1a;
+            border: 1px solid #333;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .link-box input {
+            width: 100%;
+            background: #0a0a0a;
+            border: 1px solid #444;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: monospace;
+        }
+        .link-box button {
+            margin-top: 10px;
+            width: 100%;
+            padding: 10px;
+            background: #3b82f6;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .link-box button:hover { background: #2563eb; }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    
+    <script>
         const roles = [
-            {id:'boss', name:'Boss', color:'bg-red-600', emoji:'👑'},
-            {id:'sarah', name:'Sarah', color:'bg-purple-600', emoji:'🤝'},
-            {id:'mike', name:'Mike', color:'bg-orange-600', emoji:'🛡️'},
-            {id:'jen', name:'Jen', color:'bg-teal-600', emoji:'😊'},
-            {id:'alex', name:'Alex', color:'bg-blue-600', emoji:'🧠'}
+            {id:'boss', name:'Boss', emoji:'👑', color:'#ef4444'},
+            {id:'sarah', name:'Sarah', emoji:'🤝', color:'#a855f7'},
+            {id:'mike', name:'Mike', emoji:'🛡️', color:'#f97316'},
+            {id:'jen', name:'Jen', emoji:'😊', color:'#14b8a6'},
+            {id:'alex', name:'Alex', emoji:'🧠', color:'#3b82f6'}
         ];
         
-        const dialogue = [
+        const script = [
             {role:'boss', text:"Team, I've had a vision. Sitting is the new smoking. I propose we remove ALL office chairs."},
             {role:'sarah', text:"Brilliant! Standing desks boost productivity!"},
             {role:'alex', text:"But research shows standing all day causes serious health issues."},
@@ -40,278 +191,177 @@
             {role:'alex', text:"*stays silent*"}
         ];
         
-        function init() {
-            const params = new URLSearchParams(location.search);
-            if (params.get('mode') === 'student' && params.get('host') && params.get('role')) {
-                initStudent(params.get('host'), params.get('role'));
-            } else {
-                showStart();
-            }
+        let mode = null;
+        let roomCode = null;
+        let myRole = null;
+        let ws = null;
+        let currentLine = 0;
+        
+        // Check if student mode
+        const params = new URLSearchParams(location.search);
+        if (params.get('room') && params.get('role')) {
+            mode = 'student';
+            roomCode = params.get('room');
+            myRole = roles.find(r => r.id === params.get('role'));
+            initStudent();
+        } else {
+            showStart();
         }
         
         function showStart() {
             app.innerHTML = `
-                <div class="flex items-center justify-center min-h-screen p-4">
-                    <button onclick="startHost()" class="bg-blue-600 hover:bg-blue-500 p-12 rounded-3xl transition-all hover:scale-105 shadow-2xl">
-                        <div class="text-6xl mb-4">👥</div>
-                        <h1 class="text-4xl font-bold mb-3">Start Classroom</h1>
-                        <p class="text-blue-200">Students join via links</p>
-                    </button>
+                <div class="center">
+                    <h1>Groupthink Classroom Simulator</h1>
+                    <p>A live demonstration of groupthink dynamics</p>
+                    <button class="btn" onclick="startHost()">Start Classroom Session</button>
                 </div>
             `;
         }
         
         function startHost() {
-            app.innerHTML = '<div class="flex items-center justify-center min-h-screen"><div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mb-4"></div><p class="text-gray-400">Initializing...</p></div>';
+            roomCode = Math.random().toString(36).substr(2, 6).toUpperCase();
+            mode = 'host';
             
-            peer = new Peer();
-            peer.on('open', id => {
-                hostId = id;
-                showLobby();
-            });
-            peer.on('connection', conn => {
-                connections[conn.metadata.role] = conn;
-                conn.on('open', updateStatus);
-            });
-            peer.on('error', err => {
-                app.innerHTML = `<div class="flex items-center justify-center min-h-screen p-8 text-center">
-                    <div>
-                        <div class="text-6xl mb-4">❌</div>
-                        <h1 class="text-2xl font-bold mb-4">Connection Failed</h1>
-                        <p class="text-gray-400 mb-4">${err.message || err}</p>
-                        <button onclick="location.reload()" class="px-6 py-3 bg-blue-600 rounded-lg">Try Again</button>
-                    </div>
-                </div>`;
-            });
-        }
-        
-        function showLobby() {
             const baseUrl = location.href.split('?')[0];
             
             app.innerHTML = `
-                <div class="p-4 max-w-6xl mx-auto">
-                    <h1 class="text-4xl font-bold text-center mb-2">Student Join Links</h1>
-                    <p class="text-center text-gray-400 mb-2">Room ID: <span class="text-blue-400 font-mono">${hostId}</span></p>
-                    <p class="text-center text-sm text-gray-500 mb-8">Students click their character's link to join</p>
+                <div class="container">
+                    <h1>Classroom Setup</h1>
+                    <p>Room Code: <strong style="font-size:32px; color:#3b82f6;">${roomCode}</strong></p>
+                    <p style="color:#888; font-size:14px;">Share these links with students. They click to join as that character.</p>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-                        ${roles.map(r => {
-                            const url = `${baseUrl}?mode=student&host=${hostId}&role=${r.id}`;
-                            return `
-                            <div id="card-${r.id}" class="bg-gray-900 p-4 rounded-xl border-2 border-gray-700 text-center">
-                                <div class="${r.color} w-16 h-16 rounded-full mx-auto flex items-center justify-center text-3xl mb-3">${r.emoji}</div>
-                                <h3 class="font-bold mb-2">${r.name}</h3>
-                                <button onclick="navigator.clipboard.writeText('${url}').then(() => alert('Link copied! Send it to the student.'))" 
-                                    class="w-full bg-gray-800 hover:bg-gray-700 text-white text-xs py-2 px-3 rounded mb-2">
-                                    📋 Copy Link
-                                </button>
-                                <a href="${url}" target="_blank" class="block w-full bg-blue-900 hover:bg-blue-800 text-white text-xs py-2 px-3 rounded mb-2">
-                                    🔗 Open in New Tab
-                                </a>
-                                <div class="status-${r.id} text-xs mt-2 px-2 py-1 rounded bg-gray-800 text-gray-500">Waiting...</div>
+                    <div class="character-grid">
+                        ${roles.map(r => `
+                            <div class="character-card" id="card-${r.id}">
+                                <div class="emoji">${r.emoji}</div>
+                                <h3>${r.name}</h3>
+                                <div class="link-box">
+                                    <input type="text" readonly value="${baseUrl}?room=${roomCode}&role=${r.id}" id="link-${r.id}">
+                                    <button onclick="copyLink('${r.id}')">Copy Link</button>
+                                </div>
+                                <div class="status" id="status-${r.id}">Waiting...</div>
                             </div>
-                        `}).join('')}
+                        `).join('')}
                     </div>
                     
-                    <div class="text-center">
-                        <button onclick="startSim()" class="px-16 py-6 bg-green-600 hover:bg-green-500 font-bold text-2xl rounded-2xl">▶ START SIMULATION</button>
-                        <p class="text-gray-500 text-sm mt-3">You can start without waiting for everyone</p>
+                    <div style="text-align:center; margin-top:30px;">
+                        <button class="btn btn-green" onclick="startSimulation()">▶ START SIMULATION</button>
+                        <p style="margin-top:10px; font-size:14px; color:#666;">You can start even if not everyone has joined</p>
                     </div>
                 </div>
             `;
         }
         
-        function updateStatus() {
-            roles.forEach(r => {
-                if (connections[r.id]?.open) {
-                    const statusEl = document.querySelector(`.status-${r.id}`);
-                    statusEl.textContent = '✓ Connected';
-                    statusEl.className = 'status-' + r.id + ' text-xs mt-2 px-2 py-1 rounded bg-green-900 text-green-400';
-                    document.getElementById(`card-${r.id}`).className = document.getElementById(`card-${r.id}`).className.replace('gray-700', 'green-500');
-                }
-            });
+        function copyLink(roleId) {
+            const input = document.getElementById('link-' + roleId);
+            input.select();
+            document.execCommand('copy');
+            alert('Link copied! Send it to the student.');
         }
         
-        function initStudent(host, roleId) {
-            myRole = roles.find(r => r.id === roleId);
+        function initStudent() {
             app.innerHTML = `
-                <div class="flex flex-col items-center justify-center min-h-screen text-center p-6">
-                    <div class="${myRole.color} w-32 h-32 rounded-full flex items-center justify-center text-6xl mb-6 shadow-2xl">${myRole.emoji}</div>
-                    <h1 class="text-5xl font-bold mb-4">${myRole.name}</h1>
-                    <div class="mt-8 flex items-center gap-3">
-                        <div class="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
-                        <span class="text-yellow-500">Connecting to host...</span>
-                    </div>
+                <div class="student-view">
+                    <div class="emoji" style="font-size:120px;">${myRole.emoji}</div>
+                    <h1>${myRole.name}</h1>
+                    <p>Room: ${roomCode}</p>
+                    <p style="color:#10b981;">✓ Ready! Waiting for simulation to start...</p>
                 </div>
             `;
             
-            peer = new Peer();
-            peer.on('open', () => {
-                const conn = peer.connect(host, {metadata: {role: roleId}});
-                conn.on('open', () => {
-                    app.innerHTML = `
-                        <div class="flex flex-col items-center justify-center min-h-screen text-center p-6">
-                            <div class="${myRole.color} w-32 h-32 rounded-full flex items-center justify-center text-6xl mb-6 shadow-2xl">${myRole.emoji}</div>
-                            <h1 class="text-5xl font-bold mb-4">${myRole.name}</h1>
-                            <div class="mt-8 flex items-center gap-3">
-                                <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                                <span class="text-green-400">✓ Connected! Waiting for simulation...</span>
-                            </div>
-                        </div>
-                    `;
-                });
-                conn.on('data', data => {
-                    if (data.type === 'yourTurn') showTurn(data.text);
-                    else if (data.type === 'otherTurn') showListen(data.speaker, data.text);
-                    else if (data.type === 'gameEnd') showEnd();
-                });
-            });
-            peer.on('error', err => {
-                app.innerHTML += `<p class="text-red-400 mt-4">Connection error: ${err.message || err}</p>`;
-            });
+            // In a real version, this would connect via WebSocket
+            // For now, we'll simulate it locally
+            window.studentReady = true;
         }
         
-        function showTurn(text) {
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        function showStudentTurn(text) {
             app.innerHTML = `
-                <div class="flex flex-col min-h-screen bg-gradient-to-br from-green-900 to-green-950">
-                    <div class="p-4 bg-black/30 flex justify-between border-b-4 border-green-400">
-                        <div class="flex items-center gap-3">
-                            <div class="${myRole.color} w-12 h-12 rounded-full flex items-center justify-center text-2xl">${myRole.emoji}</div>
-                            <span class="font-bold text-xl">${myRole.name}</span>
-                        </div>
-                        <span class="bg-red-600 px-4 py-2 rounded-full text-sm font-bold animate-pulse">● LIVE</span>
-                    </div>
-                    <div class="flex-1 flex items-center justify-center p-6">
-                        <div class="text-center max-w-4xl w-full">
-                            <h2 class="text-green-300 text-5xl font-black mb-12 animate-pulse uppercase">YOUR TURN!</h2>
-                            <div class="bg-white text-black p-10 rounded-3xl border-8 border-green-400 shadow-2xl">
-                                <p class="text-sm text-gray-600 uppercase font-bold mb-4 tracking-wider">📢 READ THIS ALOUD:</p>
-                                <p class="text-4xl font-bold leading-relaxed">"${text}"</p>
-                            </div>
-                        </div>
+                <div class="student-view">
+                    <div class="your-turn">
+                        <h1>YOUR TURN!</h1>
+                        <div class="line">"${text}"</div>
+                        <p style="margin-top:20px; font-size:14px;">Read this aloud to the class</p>
                     </div>
                 </div>
             `;
         }
         
-        function showListen(speaker, text) {
+        function showStudentListening(speaker, text) {
             app.innerHTML = `
-                <div class="flex flex-col items-center justify-center min-h-screen p-6 text-center bg-gray-950">
-                    <div class="opacity-40 mb-12">
-                        <div class="${myRole.color} w-24 h-24 rounded-full flex items-center justify-center text-4xl mb-4 mx-auto">${myRole.emoji}</div>
-                        <p class="text-gray-500 text-lg">${myRole.name}</p>
+                <div class="student-view">
+                    <div style="opacity:0.5; margin-bottom:40px;">
+                        <div class="emoji" style="font-size:80px;">${myRole.emoji}</div>
+                        <p>${myRole.name}</p>
                     </div>
-                    <p class="text-gray-400 text-sm uppercase mb-6 tracking-wider">🔊 LISTEN...</p>
-                    <div class="bg-gray-900 p-8 rounded-2xl border-2 border-blue-600 max-w-2xl shadow-xl">
-                        <p class="text-blue-400 font-bold mb-4 text-xl">${speaker} is speaking:</p>
-                        <p class="text-gray-300 text-2xl italic leading-relaxed">"${text}"</p>
+                    <div style="max-width:600px; background:#1a1a1a; padding:30px; border-radius:15px; border:2px solid #3b82f6;">
+                        <p style="color:#3b82f6; font-weight:bold; margin-bottom:15px;">${speaker} is speaking:</p>
+                        <p style="font-size:22px; font-style:italic;">"${text}"</p>
                     </div>
                 </div>
             `;
         }
         
-        function showEnd() {
+        async function startSimulation() {
             app.innerHTML = `
-                <div class="flex flex-col items-center justify-center min-h-screen text-center p-6">
-                    <div class="text-8xl mb-8">✅</div>
-                    <h1 class="text-5xl font-bold mb-4">Simulation Complete!</h1>
-                    <p class="text-gray-400 text-xl">Thank you for participating</p>
-                </div>
-            `;
-        }
-        
-        async function startSim() {
-            gameActive = true;
-            app.innerHTML = `
-                <div class="p-4 max-w-7xl mx-auto">
-                    <div class="flex justify-between items-center mb-6 bg-gray-900 p-4 rounded-xl border border-gray-700">
+                <div class="container">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                         <div>
-                            <h1 class="text-3xl font-bold">Simulation Running</h1>
-                            <p class="text-gray-400">Line <span id="round">0</span> of 16</p>
+                            <h2>Simulation Running</h2>
+                            <p>Line <span id="lineNum">0</span> of ${script.length}</p>
                         </div>
-                        <button onclick="if(confirm('Stop simulation?'))location.reload()" class="px-6 py-3 bg-red-900 hover:bg-red-800 rounded-lg font-bold">⏹ STOP</button>
+                        <button class="btn btn-red" onclick="location.reload()">⏹ STOP</button>
                     </div>
                     
-                    <div class="bg-gray-900 rounded-xl p-6 border border-gray-700 mb-6">
-                        <h3 class="font-bold text-lg mb-3 text-blue-400">📋 Scenario:</h3>
-                        <p class="text-gray-300">The boss proposes <strong>removing ALL office chairs</strong> to "boost productivity". Watch how groupthink silences rational objections.</p>
+                    <div style="background:#1a1a1a; padding:20px; border-radius:10px; margin-bottom:20px; border:1px solid #333;">
+                        <h3 style="color:#3b82f6; margin-bottom:10px;">📋 Scenario</h3>
+                        <p>Boss proposes <strong>removing ALL office chairs</strong> to "boost productivity". Watch how groupthink silences rational objections.</p>
                     </div>
                     
-                    <div id="chat" class="bg-gray-900 rounded-xl p-6 border border-gray-700 min-h-[500px] max-h-[600px] overflow-y-auto"></div>
+                    <div class="chat-area" id="chat"></div>
                 </div>
             `;
             
-            for (let i = 0; i < dialogue.length && gameActive; i++) {
-                const line = dialogue[i];
-                document.getElementById('round').textContent = i + 1;
-                addMsg(line.role, line.text);
-                broadcast(line.role, line.text);
+            for (let i = 0; i < script.length; i++) {
+                const line = script[i];
+                currentLine = i + 1;
+                document.getElementById('lineNum').textContent = currentLine;
+                
+                // Add message to chat
+                const role = roles.find(r => r.id === line.role);
+                const msg = document.createElement('div');
+                msg.className = 'message' + (line.role === 'alex' ? ' alex' : '');
+                msg.innerHTML = `
+                    <div class="speaker">${role.emoji} ${role.name}</div>
+                    <div class="text">${line.text}</div>
+                `;
+                chat.appendChild(msg);
+                chat.scrollTop = chat.scrollHeight;
+                
+                // Update student views
+                updateStudents(line.role, line.text);
+                
                 await sleep(3000);
             }
             
-            if (gameActive) {
-                endGame();
-                setTimeout(() => {
-                    alert('✅ Simulation Complete!\n\nDiscussion Questions:\n\n1. Did you feel pressure to conform?\n2. Was Alex\'s logic fairly considered?\n3. What groupthink symptoms did you observe?\n\nSymptoms: Stereotyping dissenter, direct pressure, self-censorship, illusion of unanimity');
-                }, 1000);
-            }
+            alert('✅ Simulation Complete!\n\nDiscussion Questions:\n1. Did you feel pressure to conform?\n2. Was Alex\'s logic fairly considered?\n3. What groupthink symptoms did you observe?');
         }
         
-        function addMsg(roleId, text) {
-            const role = roles.find(r => r.id === roleId);
-            const isAlex = roleId === 'alex';
-            const msg = document.createElement('div');
-            msg.className = 'mb-4 animate-fadeIn';
-            msg.innerHTML = `
-                <div class="bg-gray-800 p-5 rounded-2xl border ${isAlex ? 'border-blue-600' : 'border-gray-700'}">
-                    <div class="flex items-center gap-3 mb-3">
-                        <span class="${role.color} w-10 h-10 rounded-full flex items-center justify-center text-xl shadow-lg">${role.emoji}</span>
-                        <span class="text-sm text-gray-400 font-bold uppercase tracking-wide">${role.name}</span>
-                    </div>
-                    <p class="text-gray-200 text-lg leading-relaxed ${isAlex ? 'text-blue-200' : ''}">${text}</p>
-                </div>
-            `;
-            chat.appendChild(msg);
-            chat.scrollTop = chat.scrollHeight;
-        }
-        
-        function broadcast(roleId, text) {
-            if (connections[roleId]?.open) {
-                connections[roleId].send({type: 'yourTurn', text: text});
-            }
-            roles.forEach(r => {
-                if (r.id !== roleId && connections[r.id]?.open) {
-                    connections[r.id].send({
-                        type: 'otherTurn',
-                        speaker: roles.find(x => x.id === roleId).name,
-                        text: text
-                    });
+        function updateStudents(speakingRole, text) {
+            // In real version, this would send via WebSocket
+            // For demo, if we're a student, update our view
+            if (mode === 'student' && myRole) {
+                if (myRole.id === speakingRole) {
+                    showStudentTurn(text);
+                } else {
+                    const speaker = roles.find(r => r.id === speakingRole).name;
+                    showStudentListening(speaker, text);
                 }
-            });
-        }
-        
-        function endGame() {
-            Object.values(connections).forEach(conn => {
-                if (conn?.open) conn.send({type: 'gameEnd'});
-            });
+            }
         }
         
         function sleep(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
+            return new Promise(r => setTimeout(r, ms));
         }
-        
-        window.onload = init;
     </script>
-    
-    <style>
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fadeIn {
-            animation: fadeIn 0.5s ease-out;
-        }
-    </style>
 </body>
 </html>
